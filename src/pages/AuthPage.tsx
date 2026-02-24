@@ -1,115 +1,152 @@
-import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { Link, useNavigate } from "react-router-dom";
-import { BookOpen, Mail, Lock, ArrowLeft } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-const AuthPage = () => {
-  const [isLogin, setIsLogin] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-  const { toast } = useToast();
+type User = { email: string };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    if (isLogin) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        toast({ title: "Login failed", description: error.message, variant: "destructive" });
-      } else {
-        toast({ title: "Welcome back!" });
-        navigate("/");
-      }
-    } else {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: window.location.origin },
-      });
-      if (error) {
-        toast({ title: "Signup failed", description: error.message, variant: "destructive" });
-      } else {
-        toast({
-          title: "Check your email",
-          description: "We sent you a confirmation link to verify your account.",
-        });
-      }
-    }
-
-    setLoading(false);
-  };
-
-  return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
-      <Link to="/" className="absolute top-6 left-6 flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-        <ArrowLeft className="h-4 w-4" />
-        <span className="text-sm">Back</span>
-      </Link>
-
-      <div className="w-full max-w-sm">
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <BookOpen className="h-8 w-8 text-primary" />
-          <span className="text-2xl font-serif font-bold tracking-tight">Inkwell</span>
-        </div>
-
-        <h1 className="text-3xl font-serif font-bold text-center mb-2">
-          {isLogin ? "Welcome back" : "Join Inkwell"}
-        </h1>
-        <p className="text-muted-foreground text-center mb-8">
-          {isLogin ? "Sign in to start writing." : "Create an account to start writing."}
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full bg-secondary/50 rounded-md pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 border border-border placeholder:text-muted-foreground"
-            />
-          </div>
-
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-              className="w-full bg-secondary/50 rounded-md pl-10 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 border border-border placeholder:text-muted-foreground"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-primary text-primary-foreground py-3 rounded-md text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {loading ? "Please wait..." : isLogin ? "Sign in" : "Create account"}
-          </button>
-        </form>
-
-        <p className="text-sm text-muted-foreground text-center mt-6">
-          {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
-          <button
-            onClick={() => setIsLogin(!isLogin)}
-            className="text-primary font-medium hover:underline"
-          >
-            {isLogin ? "Sign up" : "Sign in"}
-          </button>
-        </p>
-      </div>
-    </div>
-  );
+type UserRecord = {
+  email: string;     // stored lowercase
+  password: string;  // DEMO ONLY (not secure). Use real auth (Supabase/Firebase) for production.
 };
 
-export default AuthPage;
+type AuthContextValue = {
+  user: User | null;
+  login: (email: string, password: string) => void;
+  signup: (email: string, password: string) => void;
+  logout: () => void;
+};
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+const STORAGE_USER = "inkwell_user_v1";
+const STORAGE_USERS = "inkwell_users_v1";
+
+/** Stronger email validation than a simple regex (still not full RFC, but practical). */
+function validateEmail(emailRaw: string): { ok: boolean; message?: string } {
+  const email = emailRaw.trim();
+
+  if (!email) return { ok: false, message: "Email is required." };
+  if (email.length > 254) return { ok: false, message: "Email is too long." };
+
+  const at = email.indexOf("@");
+  if (at <= 0 || at !== email.lastIndexOf("@")) {
+    return { ok: false, message: "Email must contain exactly one '@'." };
+  }
+
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+
+  if (local.length > 64) return { ok: false, message: "Email local-part is too long." };
+  if (!domain) return { ok: false, message: "Email domain is missing." };
+
+  if (local.startsWith(".") || local.endsWith(".")) {
+    return { ok: false, message: "Email local-part can't start/end with '.'." };
+  }
+  if (domain.startsWith("-") || domain.endsWith("-")) {
+    return { ok: false, message: "Email domain can't start/end with '-'." };
+  }
+  if (email.includes("..")) return { ok: false, message: "Email can't contain consecutive dots." };
+
+  // Domain must contain a dot and valid characters
+  if (!domain.includes(".")) return { ok: false, message: "Email domain must contain a '.'." };
+  const basicPattern = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
+  if (!basicPattern.test(email)) return { ok: false, message: "Email format is invalid." };
+
+  return { ok: true };
+}
+
+function validatePassword(pw: string): { ok: boolean; message?: string } {
+  if (!pw?.trim()) return { ok: false, message: "Password is required." };
+  if (pw.length < 6) return { ok: false, message: "Password must be at least 6 characters." };
+  return { ok: true };
+}
+
+function loadUsers(): UserRecord[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_USERS);
+    if (!raw) return [];
+    const arr = JSON.parse(raw) as UserRecord[];
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((u) => u && typeof u.email === "string" && typeof u.password === "string")
+      .map((u) => ({ email: u.email.toLowerCase().trim(), password: u.password }));
+  } catch {
+    return [];
+  }
+}
+
+function saveUsers(users: UserRecord[]) {
+  localStorage.setItem(STORAGE_USERS, JSON.stringify(users));
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<UserRecord[]>([]);
+
+  useEffect(() => {
+    setUsers(loadUsers());
+    try {
+      const raw = localStorage.getItem(STORAGE_USER);
+      if (raw) setUser(JSON.parse(raw) as User);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const persistUser = (u: User | null) => {
+    setUser(u);
+    try {
+      if (u) localStorage.setItem(STORAGE_USER, JSON.stringify(u));
+      else localStorage.removeItem(STORAGE_USER);
+    } catch {
+      // ignore
+    }
+  };
+
+  const value = useMemo<AuthContextValue>(() => {
+    return {
+      user,
+
+      login: (emailRaw: string, password: string) => {
+        const email = emailRaw.trim().toLowerCase();
+        const ev = validateEmail(email);
+        if (!ev.ok) throw new Error(ev.message || "Invalid email.");
+
+        const pv = validatePassword(password);
+        if (!pv.ok) throw new Error(pv.message || "Invalid password.");
+
+        const found = users.find((u) => u.email === email);
+        if (!found) throw new Error("No account found for this email. Please create an account.");
+        if (found.password !== password) throw new Error("Incorrect password.");
+
+        persistUser({ email });
+      },
+
+      signup: (emailRaw: string, password: string) => {
+        const email = emailRaw.trim().toLowerCase();
+        const ev = validateEmail(email);
+        if (!ev.ok) throw new Error(ev.message || "Invalid email.");
+
+        const pv = validatePassword(password);
+        if (!pv.ok) throw new Error(pv.message || "Invalid password.");
+
+        const exists = users.some((u) => u.email === email);
+        if (exists) throw new Error("This email is already registered. Please log in.");
+
+        const updated = [...users, { email, password }];
+        setUsers(updated);
+        saveUsers(updated);
+
+        persistUser({ email });
+      },
+
+      logout: () => persistUser(null),
+    };
+  }, [user, users]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within <AuthProvider />");
+  return ctx;
+}

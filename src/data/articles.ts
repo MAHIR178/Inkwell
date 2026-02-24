@@ -34,7 +34,7 @@ export const articles: Article[] = [
     `,
     author: {
       name: "Sarah Chen",
-      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face",
+      avatar: "https://images.unsplash.com/photo-1746792613213-c154e2891449?auto=format&fit=crop&w=1200&h=600&q=80",
       bio: "Senior engineer & writer. Exploring the human side of technology.",
     },
     coverImage: "https://images.unsplash.com/photo-1515879218367-8466d910auj7?w=800&h=400&fit=crop",
