@@ -22,7 +22,7 @@ const Navbar = () => {
           </button>
 
           <Link
-            to="/"
+            to="/auth"
             className="hidden sm:flex items-center gap-2 text-sm font-medium text-primary-foreground bg-primary px-4 py-2 rounded-full hover:opacity-90 transition-opacity"
           >
             <PenLine className="h-4 w-4" />
