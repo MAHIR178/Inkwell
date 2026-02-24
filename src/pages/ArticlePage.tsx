@@ -3,7 +3,7 @@ import { articles } from "@/data/articles";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { ArrowLeft } from "lucide-react";
-
+//m
 const ArticlePage = () => {
   const { id } = useParams();
   const article = articles.find((a) => a.id === id);
