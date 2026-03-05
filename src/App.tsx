@@ -8,7 +8,7 @@ import Index from "./pages/Index";
 import ArticlePage from "./pages/ArticlePage";
 import NotFound from "./pages/NotFound";
 import Write from "./pages/write";
-import { AuthProvider } from "@/pages/AuthPage";
+import { AuthProvider } from "@/context/auth-context";
 
 const queryClient = new QueryClient();
 

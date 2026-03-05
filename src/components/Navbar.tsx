@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
-import { useAuth } from "@/pages/AuthPage";
+import { useAuth } from "@/context/auth-context";
 
 const Navbar = () => {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -33,9 +33,7 @@ const Navbar = () => {
   const [signupPassword, setSignupPassword] = useState("");
   const [signupPassword2, setSignupPassword2] = useState("");
 
-  // client-side "valid email" check (context has the stricter one too)
   const quickEmailOk = (email: string) => /^\S+@\S+\.\S+$/.test(email.trim());
-
   const loginEmailOk = useMemo(() => quickEmailOk(loginEmail), [loginEmail]);
   const signupEmailOk = useMemo(() => quickEmailOk(signupEmail), [signupEmail]);
 
@@ -101,16 +99,17 @@ const Navbar = () => {
               <TabsTrigger value="signup">Create account</TabsTrigger>
             </TabsList>
 
+            {/* LOGIN */}
             <TabsContent value="login" className="mt-5">
               <form
                 className="space-y-4"
                 onSubmit={(e) => {
                   e.preventDefault();
                   try {
-                    login(loginEmail, loginPassword); // STRICT validation happens in context
+                    login(loginEmail, loginPassword);
                     setAuthOpen(false);
-                    toast({ title: "Logged in", description: "Welcome back!" });
-                    navigate("/write");
+                    toast({ title: "Logged in", description: "Login successful." });
+                    navigate("/write"); // ✅ after login go write
                   } catch (err: any) {
                     toast({ title: "Login failed", description: err?.message || "Try again." });
                   }
@@ -147,31 +146,46 @@ const Navbar = () => {
                   type="submit"
                   className="w-full"
                   disabled={!loginEmailOk || !loginPassword.trim()}
-                  title={!loginEmailOk ? "Enter a valid email to continue" : undefined}
                 >
                   Continue
                 </Button>
-
-                <p className="text-xs text-muted-foreground">
-                  Demo auth: requires a real-looking email and an account created in “Create account”.
-                </p>
               </form>
             </TabsContent>
 
+            {/* SIGNUP */}
             <TabsContent value="signup" className="mt-5">
               <form
                 className="space-y-4"
                 onSubmit={(e) => {
                   e.preventDefault();
+
                   if (signupPassword !== signupPassword2) {
                     toast({ title: "Passwords don’t match", description: "Please retype your password." });
                     return;
                   }
+
                   try {
-                    signup(signupEmail, signupPassword); // STRICT validation happens in context
-                    setAuthOpen(false);
-                    toast({ title: "Account created", description: "You’re in — start writing." });
-                    navigate("/write");
+                    // ✅ Create account (NO auto login)
+                    signup(signupEmail, signupPassword);
+
+                    // ✅ show success msg
+                    toast({
+                      title: "Account created",
+                      description: "Your account created successfully. Please log in.",
+                    });
+
+                    // ✅ redirect to login page (login tab)
+                    setTab("login");
+
+                    // ✅ prefill login email
+                    setLoginEmail(signupEmail.trim());
+
+                    // clear fields
+                    setSignupPassword("");
+                    setSignupPassword2("");
+                    setLoginPassword("");
+
+                    // keep dialog open so user can log in immediately
                   } catch (err: any) {
                     toast({ title: "Sign up failed", description: err?.message || "Try again." });
                   }
@@ -223,10 +237,6 @@ const Navbar = () => {
                 >
                   Create account
                 </Button>
-
-                <p className="text-xs text-muted-foreground">
-                  Demo only: stores email/password locally for validation.
-                </p>
               </form>
             </TabsContent>
           </Tabs>

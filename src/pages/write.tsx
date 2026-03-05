@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
-import { useAuth } from "@/pages/AuthPage";
+import { useAuth } from "@/context/auth-context";
 
 export default function Write() {
   const { user } = useAuth();
